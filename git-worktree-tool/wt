@@ -13,7 +13,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Version (replaced during release process)
-VERSION="2.0.0"
+VERSION="2.1.0"
 
 # ============================================================================
 # Configuration System
