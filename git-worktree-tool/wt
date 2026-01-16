@@ -16,6 +16,99 @@ NC='\033[0m' # No Color
 VERSION="2.0.0"
 
 # ============================================================================
+# Configuration System
+# ============================================================================
+
+# Config file location (follows XDG Base Directory spec)
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/wt"
+CONFIG_FILE="$CONFIG_DIR/config"
+
+# Default configuration values
+DEFAULT_EDITOR="code"
+DEFAULT_EDITOR_FLAGS=""
+DEFAULT_AUTO_INSTALL="true"
+DEFAULT_DELETE_BRANCH_PROMPT="true"
+DEFAULT_PACKAGE_MANAGER=""  # Empty = auto-detect
+DEFAULT_WORKTREE_NAME_PATTERN="{repo}-{branch}"
+
+# Current configuration (will be loaded from file or defaults)
+EDITOR="$DEFAULT_EDITOR"
+EDITOR_FLAGS="$DEFAULT_EDITOR_FLAGS"
+AUTO_INSTALL="$DEFAULT_AUTO_INSTALL"
+DELETE_BRANCH_PROMPT="$DEFAULT_DELETE_BRANCH_PROMPT"
+PACKAGE_MANAGER="$DEFAULT_PACKAGE_MANAGER"
+WORKTREE_NAME_PATTERN="$DEFAULT_WORKTREE_NAME_PATTERN"
+
+# Load configuration from file if it exists
+load_config() {
+  if [ -f "$CONFIG_FILE" ]; then
+    # Source the config file, but validate it first
+    if [ -r "$CONFIG_FILE" ]; then
+      # shellcheck source=/dev/null
+      # Use a subshell to avoid polluting the environment with unexpected variables
+      source "$CONFIG_FILE" 2>/dev/null || true
+    fi
+  fi
+}
+
+# Create default configuration file if it doesn't exist
+init_config() {
+  if [ ! -f "$CONFIG_FILE" ]; then
+    mkdir -p "$CONFIG_DIR"
+
+    cat > "$CONFIG_FILE" << 'EOFCONFIG'
+# wt Configuration File
+# Location: ~/.config/wt/config
+#
+# This file allows you to customize the behavior of the wt worktree tool.
+# All values below are optional - if not specified, defaults will be used.
+
+# The editor to open when using --code or --go flags
+# Examples: code, cursor, zed, nvim, vim
+EDITOR="code"
+
+# Additional flags to pass to the editor
+# Examples: "" (none), "--remote=wsl", "--wait"
+EDITOR_FLAGS=""
+
+# Automatically install dependencies after creating a worktree
+# Values: true or false
+AUTO_INSTALL="true"
+
+# Prompt before deleting branch when using 'wt delete'
+# If false, branch will be deleted without prompt
+# Values: true or false
+DELETE_BRANCH_PROMPT="true"
+
+# Override package manager detection (bun, npm, yarn, pnpm)
+# Leave empty to auto-detect based on lock files
+PACKAGE_MANAGER=""
+
+# Customize worktree naming pattern
+# Available variables: {repo} (repository name), {branch} (branch name)
+# Default: "{repo}-{branch}"
+# Examples: "{branch}", "wt-{branch}", "{repo}/{branch}"
+WORKTREE_NAME_PATTERN="{repo}-{branch}"
+EOFCONFIG
+
+    info "Created config file at $CONFIG_FILE"
+  fi
+}
+
+# Parse the worktree name pattern with variables
+apply_worktree_pattern() {
+  local pattern="$1"
+  local repo_name="$2"
+  local branch_name="$3"
+
+  # Replace {repo} and {branch} placeholders
+  pattern="${pattern//\{repo\}/$repo_name}"
+  pattern="${pattern//\{branch\}/$branch_name}"
+
+  echo "$pattern"
+}
+
+# ============================================================================
 # Helper Functions
 # ============================================================================
 
@@ -178,10 +271,18 @@ cmd_create() {
 
   local repo_root=$(get_repo_root)
   local repo_name=$(get_repo_name)
-  local worktree_path="../${repo_name}-${branch_name}"
-  local worktree_full_path="${repo_root}/../${repo_name}-${branch_name}"
+
+  # Apply the worktree naming pattern from config
+  local worktree_name=$(apply_worktree_pattern "$WORKTREE_NAME_PATTERN" "$repo_name" "$branch_name")
+  local worktree_path="../${worktree_name}"
+  local worktree_full_path="${repo_root}/../${worktree_name}"
+
   local default_branch=$(get_default_branch)
-  local pkg_manager=$(get_package_manager)
+  # Use configured package manager or auto-detect
+  local pkg_manager="${PACKAGE_MANAGER}"
+  if [ -z "$pkg_manager" ]; then
+    pkg_manager=$(get_package_manager)
+  fi
 
   # Check if worktree already exists
   if [ -d "$worktree_full_path" ]; then
@@ -207,39 +308,44 @@ cmd_create() {
 
   success "Worktree created at $worktree_path"
 
-  # Install dependencies
-  info "Installing dependencies in $worktree_path..."
-  (
-    cd "$worktree_full_path"
-    case "$pkg_manager" in
-      bun)
-        bun install || warn "bun install failed"
-        ;;
-      npm)
-        npm install || warn "npm install failed"
-        ;;
-      yarn)
-        yarn install || warn "yarn install failed"
-        ;;
-      pnpm)
-        pnpm install || warn "pnpm install failed"
-        ;;
-    esac
-  )
-
-  success "Dependencies installed"
-
-  # Open VS Code if requested
-  if [ "$open_code" = true ]; then
-    info "Opening VS Code..."
-    code "$worktree_full_path" &
+  # Install dependencies if AUTO_INSTALL is enabled
+  if [ "$AUTO_INSTALL" = "true" ]; then
+    info "Installing dependencies in $worktree_path..."
+    (
+      cd "$worktree_full_path"
+      case "$pkg_manager" in
+        bun)
+          bun install || warn "bun install failed"
+          ;;
+        npm)
+          npm install || warn "npm install failed"
+          ;;
+        yarn)
+          yarn install || warn "yarn install failed"
+          ;;
+        pnpm)
+          pnpm install || warn "pnpm install failed"
+          ;;
+      esac
+    )
+    success "Dependencies installed"
+  else
+    info "Skipping dependency installation (AUTO_INSTALL=false)"
   fi
 
-  # Handle --go flag: switch to worktree and launch Claude Code
+  # Open editor if requested (via --code or --go flags)
+  if [ "$open_code" = true ]; then
+    info "Opening editor: $EDITOR"
+    # shellcheck disable=SC2086
+    $EDITOR $EDITOR_FLAGS "$worktree_full_path" &
+  fi
+
+  # Handle --go flag: switch to worktree and launch editor
   if [ "$go_flag" = true ]; then
-    info "Switching to worktree and launching Claude Code..."
+    info "Switching to worktree and launching editor: $EDITOR"
     cd "$worktree_full_path"
-    code . &
+    # shellcheck disable=SC2086
+    $EDITOR $EDITOR_FLAGS . &
     success "Opened in: $worktree_full_path"
     echo ""
     return 0
@@ -343,9 +449,21 @@ cmd_delete() {
 
   # Delete branch by default (unless --keep-branch)
   if [ "$keep_branch" = false ]; then
-    read -p "Delete branch '$branch_name' as well? (y/n) " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
+    local should_delete_branch=false
+
+    if [ "$DELETE_BRANCH_PROMPT" = "true" ]; then
+      # Prompt the user
+      read -p "Delete branch '$branch_name' as well? (y/n) " -n 1 -r
+      echo
+      if [[ $REPLY =~ ^[Yy]$ ]]; then
+        should_delete_branch=true
+      fi
+    else
+      # Delete without prompting
+      should_delete_branch=true
+    fi
+
+    if [ "$should_delete_branch" = true ]; then
       git branch -D "$branch_name" 2>/dev/null || true
       git push origin --delete "$branch_name" 2>/dev/null || true
       success "Branch deleted"
@@ -372,12 +490,26 @@ USAGE:
 COMMANDS:
   list                    List all active worktrees
   create <branch>         Create a new worktree with <branch>
-                         Options: --code (opens in VS Code)
-                                  --go (cd into worktree + launch Claude Code)
+                         Options: --code (opens in configured editor)
+                                  --go (cd into worktree + launch editor)
   switch <branch>         Switch to a worktree (via shell function)
   delete <branch>         Delete a worktree (deletes branch by default)
                          Options: --keep-branch (preserve the git branch)
+  config <subcommand>     Manage configuration
+                         Subcommands: edit, show, reset, path
   help                    Show this help message
+
+CONFIGURATION:
+  Config file: ~/.config/wt/config
+  Create automatically on first use.
+
+  Available options:
+    EDITOR               - Editor command (default: code)
+    EDITOR_FLAGS         - Flags for editor (default: "")
+    AUTO_INSTALL         - Auto-install dependencies (default: true)
+    DELETE_BRANCH_PROMPT - Prompt before deleting branch (default: true)
+    PACKAGE_MANAGER      - Override PM detection: bun|npm|yarn|pnpm (default: auto)
+    WORKTREE_NAME_PATTERN - Pattern for worktree names (default: {repo}-{branch})
 
 EXAMPLES:
   wt list
@@ -388,12 +520,17 @@ EXAMPLES:
   wt delete DEV-123
   wt delete DEV-123 --keep-branch
 
+  wt config show            - Display current configuration
+  wt config edit            - Edit config in editor
+  wt config path            - Show config file location
+  wt config reset           - Reset to defaults
+
 SHELL SETUP (required for 'switch' to work):
   Add this function to your ~/.zshrc:
 
     wt() {
       local script="$HOME/.claude/skills/git-worktree-guide/wt"
-      if [ "$1" = "switch" ] || ([ $# -eq 1 ] && [ "$1" != "list" ] && [ "$1" != "create" ] && [ "$1" != "delete" ] && [ "$1" != "help" ]); then
+      if [ "$1" = "switch" ] || ([ $# -eq 1 ] && [ "$1" != "list" ] && [ "$1" != "create" ] && [ "$1" != "delete" ] && [ "$1" != "config" ] && [ "$1" != "help" ]); then
         local output=$("$script" "$@")
         if [ $? -eq 0 ]; then
           eval "$output"
@@ -409,10 +546,85 @@ EOF
 }
 
 # ============================================================================
+# Command: config
+# ============================================================================
+
+cmd_config() {
+  local subcommand="${1:-show}"
+
+  case "$subcommand" in
+    edit)
+      # Open config file in editor
+      if [ ! -f "$CONFIG_FILE" ]; then
+        init_config
+      fi
+
+      if [ -z "$EDITOR" ] || [ "$EDITOR" = "code" ]; then
+        code "$CONFIG_FILE"
+      else
+        "$EDITOR" "$CONFIG_FILE"
+      fi
+      success "Config file opened in editor"
+      ;;
+    show)
+      # Display current configuration
+      if [ ! -f "$CONFIG_FILE" ]; then
+        info "No config file found. Using defaults."
+        echo ""
+      else
+        echo -e "${BLUE}Current configuration (from $CONFIG_FILE):${NC}"
+        cat "$CONFIG_FILE"
+        echo ""
+      fi
+
+      echo -e "${BLUE}Active settings:${NC}"
+      echo "  EDITOR: $EDITOR"
+      echo "  EDITOR_FLAGS: ${EDITOR_FLAGS:-(none)}"
+      echo "  AUTO_INSTALL: $AUTO_INSTALL"
+      echo "  DELETE_BRANCH_PROMPT: $DELETE_BRANCH_PROMPT"
+      echo "  PACKAGE_MANAGER: ${PACKAGE_MANAGER:-(auto-detect)}"
+      echo "  WORKTREE_NAME_PATTERN: $WORKTREE_NAME_PATTERN"
+      echo ""
+      ;;
+    reset)
+      # Reset to defaults by removing config file
+      if [ -f "$CONFIG_FILE" ]; then
+        read -p "Reset configuration to defaults? This will delete $CONFIG_FILE (y/n) " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+          rm "$CONFIG_FILE"
+          success "Configuration reset to defaults"
+        else
+          info "Reset cancelled"
+        fi
+      else
+        info "Already using default configuration"
+      fi
+      echo ""
+      ;;
+    path)
+      # Show the config file path
+      echo "$CONFIG_FILE"
+      ;;
+    *)
+      error "Unknown config subcommand: $subcommand. Use: edit, show, reset, path"
+      ;;
+  esac
+}
+
+# ============================================================================
 # Main
 # ============================================================================
 
 main() {
+  # Initialize config directory if needed (silent - only creates on first run)
+  if [ ! -d "$CONFIG_DIR" ]; then
+    mkdir -p "$CONFIG_DIR"
+  fi
+
+  # Load user configuration (must happen before any command)
+  load_config
+
   local command="${1:-help}"
 
   case "$command" in
@@ -428,9 +640,14 @@ main() {
     delete)
       cmd_delete "${2:-}" "${3:-}"
       ;;
+<<<<<<< HEAD
     --version|-v|version)
       echo "wt version ${VERSION}"
       exit 0
+=======
+    config)
+      cmd_config "${2:-show}"
+>>>>>>> 888761c (feat: add configuration system for wt tool)
       ;;
     help|--help|-h)
       cmd_help
