@@ -164,24 +164,30 @@ validate_branch_name() {
   fi
 }
 
-# Detect if we're in a git repository
+# check_git_repo - Verify we're inside a git repository
+# Exits with error if not in a git repo
 check_git_repo() {
   if ! git rev-parse --git-dir > /dev/null 2>&1; then
     error "Not a git repository. Please run this from within a git repository."
   fi
 }
 
-# Get the git repository root
+# get_repo_root - Get the absolute path to the repository root
+# Returns: Absolute path to repo root (e.g., /Users/name/repos/myproject)
 get_repo_root() {
   git rev-parse --show-toplevel
 }
 
-# Get the repository name
+# get_repo_name - Get the repository directory name
+# Returns: Just the directory name, not the full path (e.g., "myproject")
 get_repo_name() {
   basename "$(get_repo_root)"
 }
 
-# Get the default branch (main or master)
+# get_default_branch - Detect the repository's default branch
+# Checks remote HEAD first, falls back to checking for main/master locally
+# Returns: Branch name (typically "main" or "master")
+# Exits with error if neither main nor master exists
 get_default_branch() {
   # Try to get from remote HEAD first
   if git symbolic-ref refs/remotes/origin/HEAD > /dev/null 2>&1; then
@@ -198,7 +204,9 @@ get_default_branch() {
   fi
 }
 
-# Detect the package manager
+# get_package_manager - Detect which package manager the project uses
+# Checks for lock files in order: bun, npm, yarn, pnpm
+# Returns: Package manager name (defaults to "npm" if none detected)
 get_package_manager() {
   local repo_root
   repo_root=$(get_repo_root)
@@ -217,13 +225,18 @@ get_package_manager() {
   fi
 }
 
-# Check if a worktree exists
+# worktree_exists - Check if a worktree exists at the given path
+# Arguments: $1 - worktree path to check
+# Returns: 0 if exists, 1 if not
 worktree_exists() {
   local worktree_path="$1"
   git worktree list | grep -q "^$worktree_path" && return 0 || return 1
 }
 
-# Find worktree by branch name (fuzzy match)
+# find_worktree_by_branch - Find a worktree's path by its branch name
+# Arguments: $1 - branch name (exact or partial match)
+# Returns: Worktree path if found, empty string if not
+# First tries exact match, then falls back to case-insensitive fuzzy match
 find_worktree_by_branch() {
   local branch_name="$1"
   local match
@@ -237,7 +250,8 @@ find_worktree_by_branch() {
   echo "$match"
 }
 
-# Get the current worktree path
+# get_current_worktree - Get the path of the current worktree
+# Returns: Absolute path to the current worktree's root directory
 get_current_worktree() {
   git rev-parse --show-toplevel
 }
@@ -246,6 +260,9 @@ get_current_worktree() {
 # Command: list
 # ============================================================================
 
+# cmd_list - Display all worktrees with their branches
+# Shows current worktree with a green checkmark, others with yellow bullet
+# Usage: wt list
 cmd_list() {
   check_git_repo
 
@@ -286,6 +303,12 @@ cmd_list() {
 # Command: create
 # ============================================================================
 
+# cmd_create - Create a new worktree with a branch
+# Arguments: $1 - branch name (required)
+#            $2 - optional flag: --code (open in editor) or --go (cd + editor)
+# Creates worktree in sibling directory using WORKTREE_NAME_PATTERN
+# Automatically installs dependencies if AUTO_INSTALL=true
+# Usage: wt create <branch-name> [--code|--go]
 cmd_create() {
   check_git_repo
 
@@ -398,6 +421,10 @@ cmd_create() {
 # Command: switch
 # ============================================================================
 
+# cmd_switch - Switch to an existing worktree by branch name
+# Arguments: $1 - branch name (exact or fuzzy match)
+# Outputs a cd command for the shell wrapper to eval
+# Usage: wt switch <branch-name>
 cmd_switch() {
   check_git_repo
 
@@ -422,6 +449,12 @@ cmd_switch() {
 # Command: delete
 # ============================================================================
 
+# cmd_delete - Remove a worktree and optionally its branch
+# Arguments: $1 - branch name (required)
+#            $2 - optional flag: --keep-branch (preserve git branch)
+# Handles uncommitted changes with interactive prompts
+# Deletes both local and remote branches by default
+# Usage: wt delete <branch-name> [--keep-branch]
 cmd_delete() {
   check_git_repo
 
