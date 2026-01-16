@@ -33,6 +33,71 @@ wt delete DEV-123
 
 ---
 
+## Configuring the `wt` Script
+
+The `wt` script can be customized to match your workflow. Configuration is optional - everything works with sensible defaults.
+
+### Configuration Location
+
+Configuration file: `~/.config/wt/config`
+
+The config file is created automatically on first use. You can view, edit, or reset it using:
+
+```bash
+# Show current configuration
+wt config show
+
+# Edit configuration in your editor
+wt config edit
+
+# View config file location
+wt config path
+
+# Reset to defaults (removes config file)
+wt config reset
+```
+
+### Available Configuration Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `EDITOR` | `code` | Editor to open with `--code` or `--go` flags. Examples: `cursor`, `zed`, `nvim`, `vim` |
+| `EDITOR_FLAGS` | (empty) | Additional flags to pass to editor. Examples: `"--remote=wsl"`, `"--wait"` |
+| `AUTO_INSTALL` | `true` | Automatically install dependencies after creating worktree |
+| `DELETE_BRANCH_PROMPT` | `true` | Prompt before deleting branch. Set to `false` to delete without asking |
+| `PACKAGE_MANAGER` | (auto-detect) | Override package manager detection. Options: `bun`, `npm`, `yarn`, `pnpm` |
+| `WORKTREE_NAME_PATTERN` | `{repo}-{branch}` | Pattern for worktree directory names. Variables: `{repo}`, `{branch}` |
+
+### Configuration Examples
+
+**Example 1: Using Cursor editor with WSL**
+```bash
+EDITOR="cursor"
+EDITOR_FLAGS="--remote=wsl"
+```
+
+**Example 2: Skip dependency installation**
+```bash
+AUTO_INSTALL="false"
+```
+
+**Example 3: Custom worktree naming**
+```bash
+# Just use branch name: feature-123 instead of repo-feature-123
+WORKTREE_NAME_PATTERN="{branch}"
+
+# Prefix with "wt": wt-feature-123
+WORKTREE_NAME_PATTERN="wt-{branch}"
+```
+
+**Example 4: Force package manager**
+```bash
+# Always use bun, even if npm is detected
+PACKAGE_MANAGER="bun"
+```
+
+---
+
 ## When to Use This Skill
 
 - **Using the `wt` script** for everyday worktree operations (fastest path)
@@ -664,7 +729,9 @@ wt create DEV-123
 
 ## Skill Version & Updates
 
+- **Version**: 2.0.0
 - **Last Updated**: January 16, 2026
+- **Changelog**: See [releases/git-worktree-tool/CHANGELOG.md](../releases/git-worktree-tool/CHANGELOG.md) for version history
 - **Skill Type**: Practical tool + comprehensive guidance
 - **Scope**: Git worktree operations with automated `wt` script
 - **Learning Mode**: Yes - explains WHY, not just HOW
