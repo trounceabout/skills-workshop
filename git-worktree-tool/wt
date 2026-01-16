@@ -12,6 +12,9 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+# Version (replaced during release process)
+VERSION="2.0.0"
+
 # ============================================================================
 # Helper Functions
 # ============================================================================
@@ -360,8 +363,8 @@ cmd_delete() {
 # ============================================================================
 
 cmd_help() {
+  echo "wt - Simplified Git Worktree Management (v${VERSION})"
   cat << 'EOF'
-wt - Simplified Git Worktree Management
 
 USAGE:
   wt <command> [options]
@@ -424,6 +427,10 @@ main() {
       ;;
     delete)
       cmd_delete "${2:-}" "${3:-}"
+      ;;
+    --version|-v|version)
+      echo "wt version ${VERSION}"
+      exit 0
       ;;
     help|--help|-h)
       cmd_help

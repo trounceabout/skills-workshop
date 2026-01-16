@@ -664,7 +664,9 @@ wt create DEV-123
 
 ## Skill Version & Updates
 
+- **Version**: 2.0.0
 - **Last Updated**: January 16, 2026
+- **Changelog**: See [releases/git-worktree-tool/CHANGELOG.md](../releases/git-worktree-tool/CHANGELOG.md) for version history
 - **Skill Type**: Practical tool + comprehensive guidance
 - **Scope**: Git worktree operations with automated `wt` script
 - **Learning Mode**: Yes - explains WHY, not just HOW
