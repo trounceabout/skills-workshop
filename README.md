@@ -18,6 +18,30 @@ skills-workshop/
         └── CHANGELOG.md   # Version history and release notes
 ```
 
+## Documentation for Different Audiences
+
+This repository provides documentation tailored to different use cases:
+
+### For Human Developers
+- **README.md** (this file) - Repository overview, structure, and manual release process
+- **INSTALL.md** (per skill) - Installation and setup instructions
+- **SKILL.md** (per skill) - Comprehensive usage documentation
+
+### For AI Agents & Automation
+- **docs/RELEASES.md** - Structured, step-by-step release process with decision trees and validation checklists
+- **docs/.release-data.json** - Machine-readable current state metadata
+- **.claude/release-instructions.md** - Claude Code-specific guidance for handling release requests
+- **.release-schema.json** - JSON schema for validating release metadata
+
+The agent documentation includes:
+- Semantic versioning decision trees
+- Pre-flight validation checklists
+- Common scenario examples
+- Safety guardrails and error prevention
+- File location references with patterns
+
+💡 **Tip for agents:** Start with `docs/RELEASES.md` for complete release workflows.
+
 ## Available Skills
 
 ### git-worktree-tool (v2.0.0)

@@ -1,0 +1,190 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Skills Workshop Release Schema",
+  "description": "JSON Schema for validating release metadata and version information",
+  "type": "object",
+  "properties": {
+    "skills": {
+      "type": "array",
+      "description": "Array of skills managed in this repository",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "currentVersion",
+          "versionLocations",
+          "tagPattern",
+          "commitMessagePattern"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Name of the skill (lowercase, hyphen-separated)",
+            "pattern": "^[a-z0-9-]+$"
+          },
+          "currentVersion": {
+            "type": "string",
+            "description": "Current semantic version",
+            "pattern": "^\\d+\\.\\d+\\.\\d+$"
+          },
+          "description": {
+            "type": "string",
+            "description": "Brief description of the skill"
+          },
+          "versionLocations": {
+            "type": "object",
+            "description": "Locations where version information is stored",
+            "required": ["embedded", "versionFile", "changelog"],
+            "properties": {
+              "embedded": {
+                "type": "string",
+                "description": "Path to file with embedded version variable"
+              },
+              "embeddedPattern": {
+                "type": "string",
+                "description": "Regex pattern for finding embedded version"
+              },
+              "embeddedLine": {
+                "type": "integer",
+                "description": "Approximate line number of embedded version"
+              },
+              "versionFile": {
+                "type": "string",
+                "description": "Path to VERSION file (source of truth)"
+              },
+              "changelog": {
+                "type": "string",
+                "description": "Path to CHANGELOG.md file"
+              },
+              "documentation": {
+                "type": "string",
+                "description": "Path to documentation file mentioning version"
+              },
+              "documentationPattern": {
+                "type": "string",
+                "description": "Regex pattern for finding version in documentation"
+              }
+            }
+          },
+          "tagPattern": {
+            "type": "string",
+            "description": "Git tag naming pattern (use {version} for version placeholder)",
+            "pattern": "^[a-z0-9-]+/v\\{version\\}$"
+          },
+          "tagExample": {
+            "type": "string",
+            "description": "Example of what a tag looks like"
+          },
+          "commitMessagePattern": {
+            "type": "string",
+            "description": "Commit message pattern (use {version} for version placeholder)"
+          },
+          "commitMessageExample": {
+            "type": "string",
+            "description": "Example commit message"
+          },
+          "lastReleaseDate": {
+            "type": "string",
+            "description": "Date of last release in YYYY-MM-DD format",
+            "format": "date"
+          },
+          "semanticVersioning": {
+            "type": "object",
+            "description": "Semantic versioning guidelines",
+            "properties": {
+              "pattern": {
+                "type": "string",
+                "description": "Regex pattern for valid version numbers"
+              },
+              "example": {
+                "type": "string",
+                "description": "Example version number"
+              },
+              "major": {
+                "type": "object",
+                "properties": {
+                  "description": {
+                    "type": "string",
+                    "description": "When to bump MAJOR version"
+                  },
+                  "increment": {
+                    "type": "string",
+                    "description": "How MAJOR increment works"
+                  }
+                }
+              },
+              "minor": {
+                "type": "object",
+                "properties": {
+                  "description": {
+                    "type": "string",
+                    "description": "When to bump MINOR version"
+                  },
+                  "increment": {
+                    "type": "string",
+                    "description": "How MINOR increment works"
+                  }
+                }
+              },
+              "patch": {
+                "type": "object",
+                "properties": {
+                  "description": {
+                    "type": "string",
+                    "description": "When to bump PATCH version"
+                  },
+                  "increment": {
+                    "type": "string",
+                    "description": "How PATCH increment works"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "skills": [
+        {
+          "name": "git-worktree-tool",
+          "currentVersion": "2.0.0",
+          "description": "Simplified Git Worktree Management",
+          "versionLocations": {
+            "embedded": "git-worktree-tool/wt",
+            "embeddedPattern": "VERSION=\"X.Y.Z\"",
+            "embeddedLine": 16,
+            "versionFile": "releases/git-worktree-tool/VERSION",
+            "changelog": "releases/git-worktree-tool/CHANGELOG.md",
+            "documentation": "git-worktree-tool/SKILL.md",
+            "documentationPattern": "- **Version**: X.Y.Z"
+          },
+          "tagPattern": "git-worktree-tool/v{version}",
+          "tagExample": "git-worktree-tool/v2.0.0",
+          "commitMessagePattern": "Bump git-worktree-tool to v{version}",
+          "commitMessageExample": "Bump git-worktree-tool to v2.0.0",
+          "lastReleaseDate": "2026-01-16",
+          "semanticVersioning": {
+            "pattern": "^\\d+\\.\\d+\\.\\d+$",
+            "example": "2.0.0",
+            "major": {
+              "description": "Incompatible API changes, breaking changes, removed features",
+              "increment": "X.0.0"
+            },
+            "minor": {
+              "description": "New functionality (backward compatible), new features, new options",
+              "increment": "0.X.0"
+            },
+            "patch": {
+              "description": "Bug fixes, improvements, no API changes",
+              "increment": "0.0.X"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
