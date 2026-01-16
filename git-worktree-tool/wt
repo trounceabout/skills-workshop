@@ -640,14 +640,12 @@ main() {
     delete)
       cmd_delete "${2:-}" "${3:-}"
       ;;
-<<<<<<< HEAD
     --version|-v|version)
       echo "wt version ${VERSION}"
       exit 0
-=======
+      ;;
     config)
       cmd_config "${2:-show}"
->>>>>>> 888761c (feat: add configuration system for wt tool)
       ;;
     help|--help|-h)
       cmd_help
