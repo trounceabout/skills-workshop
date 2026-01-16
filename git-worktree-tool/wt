@@ -133,6 +133,37 @@ warn() {
   echo -e "${YELLOW}⚠${NC} $1"
 }
 
+# Validate branch name for git compatibility
+# Checks for empty names, spaces, and invalid git ref characters
+validate_branch_name() {
+  local branch="$1"
+
+  # Check for empty
+  if [[ -z "$branch" ]]; then
+    error "Branch name cannot be empty"
+  fi
+
+  # Check for spaces
+  if [[ "$branch" =~ [[:space:]] ]]; then
+    error "Branch name cannot contain spaces: '$branch'"
+  fi
+
+  # Check for invalid git ref characters: ~ ^ : \ * ? [
+  if [[ "$branch" =~ [\~\^:\\\*\?\[] ]]; then
+    error "Branch name contains invalid characters: '$branch'"
+  fi
+
+  # Check for leading/trailing dots or slashes
+  if [[ "$branch" =~ ^[./] ]] || [[ "$branch" =~ [./]$ ]]; then
+    error "Branch name cannot start or end with '.' or '/': '$branch'"
+  fi
+
+  # Check for consecutive dots (..)
+  if [[ "$branch" =~ \.\. ]]; then
+    error "Branch name cannot contain '..': '$branch'"
+  fi
+}
+
 # Detect if we're in a git repository
 check_git_repo() {
   if ! git rev-parse --git-dir > /dev/null 2>&1; then
@@ -272,6 +303,9 @@ cmd_create() {
   if [ -z "$branch_name" ]; then
     error "Branch name required. Usage: wt create <branch-name> [--code|--go]"
   fi
+
+  # Validate branch name before proceeding
+  validate_branch_name "$branch_name"
 
   local repo_root repo_name worktree_name default_branch
   repo_root=$(get_repo_root)
