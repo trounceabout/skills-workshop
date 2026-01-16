@@ -169,7 +169,8 @@ get_default_branch() {
 
 # Detect the package manager
 get_package_manager() {
-  local repo_root=$(get_repo_root)
+  local repo_root
+  repo_root=$(get_repo_root)
 
   if [ -f "$repo_root/bun.lockb" ]; then
     echo "bun"
@@ -194,7 +195,8 @@ worktree_exists() {
 # Find worktree by branch name (fuzzy match)
 find_worktree_by_branch() {
   local branch_name="$1"
-  local match=$(git worktree list --porcelain | grep " $branch_name$" | awk '{print $1}' | head -1)
+  local match
+  match=$(git worktree list --porcelain | grep " $branch_name$" | awk '{print $1}' | head -1)
 
   if [ -z "$match" ]; then
     # Try fuzzy matching if exact match fails
@@ -216,7 +218,8 @@ get_current_worktree() {
 cmd_list() {
   check_git_repo
 
-  local current_worktree=$(get_current_worktree)
+  local current_worktree
+  current_worktree=$(get_current_worktree)
 
   echo -e "\n${BLUE}Current worktrees:${NC}"
 
@@ -226,15 +229,16 @@ cmd_list() {
 
   git worktree list --porcelain | while read -r line; do
     if [[ "$line" =~ ^worktree ]]; then
-      # New worktree entry
-      worktree_path=$(echo "$line" | sed 's/^worktree //')
+      # New worktree entry - use parameter expansion instead of sed
+      worktree_path="${line#worktree }"
       branch=""
     elif [[ "$line" =~ ^branch ]]; then
       # Extract branch name from refs/heads/branch-name
-      branch=$(echo "$line" | sed 's/^branch refs\/heads\///')
+      branch="${line#branch refs/heads/}"
 
       # Now display the worktree
-      local worktree_name=$(basename "$worktree_path")
+      local worktree_name
+      worktree_name=$(basename "$worktree_path")
 
       if [ "$worktree_path" = "$current_worktree" ]; then
         printf "  ${GREEN}✓${NC} %-30s ${BLUE}[${branch}]${NC}\n" "$worktree_name"
@@ -269,15 +273,16 @@ cmd_create() {
     error "Branch name required. Usage: wt create <branch-name> [--code|--go]"
   fi
 
-  local repo_root=$(get_repo_root)
-  local repo_name=$(get_repo_name)
+  local repo_root repo_name worktree_name default_branch
+  repo_root=$(get_repo_root)
+  repo_name=$(get_repo_name)
 
   # Apply the worktree naming pattern from config
-  local worktree_name=$(apply_worktree_pattern "$WORKTREE_NAME_PATTERN" "$repo_name" "$branch_name")
+  worktree_name=$(apply_worktree_pattern "$WORKTREE_NAME_PATTERN" "$repo_name" "$branch_name")
   local worktree_path="../${worktree_name}"
   local worktree_full_path="${repo_root}/../${worktree_name}"
 
-  local default_branch=$(get_default_branch)
+  default_branch=$(get_default_branch)
   # Use configured package manager or auto-detect
   local pkg_manager="${PACKAGE_MANAGER}"
   if [ -z "$pkg_manager" ]; then
@@ -368,7 +373,8 @@ cmd_switch() {
     error "Branch name required. Usage: wt switch <branch-name>"
   fi
 
-  local worktree_path=$(find_worktree_by_branch "$branch_name")
+  local worktree_path
+  worktree_path=$(find_worktree_by_branch "$branch_name")
 
   if [ -z "$worktree_path" ]; then
     error "Worktree not found for branch matching '$branch_name'"
@@ -397,25 +403,28 @@ cmd_delete() {
     error "Branch name required. Usage: wt delete <branch-name> [--keep-branch]"
   fi
 
-  local worktree_path=$(find_worktree_by_branch "$branch_name")
+  local worktree_path current_worktree
+  worktree_path=$(find_worktree_by_branch "$branch_name")
 
   if [ -z "$worktree_path" ]; then
     error "Worktree not found for branch matching '$branch_name'"
   fi
 
-  local current_worktree=$(get_current_worktree)
+  current_worktree=$(get_current_worktree)
 
   # If trying to delete current worktree, switch to main first
   if [ "$worktree_path" = "$current_worktree" ]; then
     warn "Cannot delete current worktree. Switching to main repository..."
-    local repo_root=$(get_repo_root)
+    local repo_root
+    repo_root=$(get_repo_root)
     cd "$repo_root"
     info "Switched to main repository. Now deleting worktree..."
   fi
 
   # Check for uncommitted changes
   if [ -d "$worktree_path/.git" ]; then
-    local has_changes=$(cd "$worktree_path" && git status --porcelain | wc -l)
+    local has_changes
+    has_changes=$(cd "$worktree_path" && git status --porcelain | wc -l)
     if [ "$has_changes" -gt 0 ]; then
       warn "Worktree has uncommitted changes"
       echo "Options:"
