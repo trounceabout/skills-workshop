@@ -5,6 +5,21 @@ All notable changes to the git-worktree-tool skill are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.1] - 2026-01-16
+
+### Added
+- Comprehensive agent-friendly release documentation in `docs/RELEASES.md`
+- Claude Code-specific release workflow in `.claude/release-instructions.md`
+- Machine-readable release metadata in `docs/.release-data.json`
+- JSON schema for release data validation in `.release-schema.json`
+- Documentation section in README.md linking to release guides
+
+### Improved
+- Release process now has decision trees for semantic versioning
+- Step-by-step validation checklists for all release steps
+- Multi-audience documentation (AI agents, humans)
+- Safety guardrails and troubleshooting guidance
+
 ## [2.1.0] - 2026-01-16
 
 ### Added
