@@ -311,24 +311,24 @@ cmd_create() {
   # Install dependencies if AUTO_INSTALL is enabled
   if [ "$AUTO_INSTALL" = "true" ]; then
     info "Installing dependencies in $worktree_path..."
+    # Track whether installation succeeds
+    local install_success=true
     (
       cd "$worktree_full_path"
       case "$pkg_manager" in
-        bun)
-          bun install || warn "bun install failed"
-          ;;
-        npm)
-          npm install || warn "npm install failed"
-          ;;
-        yarn)
-          yarn install || warn "yarn install failed"
-          ;;
-        pnpm)
-          pnpm install || warn "pnpm install failed"
-          ;;
+        bun)  bun install  || exit 1 ;;
+        npm)  npm install  || exit 1 ;;
+        yarn) yarn install || exit 1 ;;
+        pnpm) pnpm install || exit 1 ;;
       esac
-    )
-    success "Dependencies installed"
+    ) || install_success=false
+
+    # Report accurately based on actual result
+    if [ "$install_success" = true ]; then
+      success "Dependencies installed"
+    else
+      warn "Dependency installation failed - you may need to run install manually"
+    fi
   else
     info "Skipping dependency installation (AUTO_INSTALL=false)"
   fi
