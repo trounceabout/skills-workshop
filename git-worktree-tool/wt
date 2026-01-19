@@ -133,24 +133,61 @@ warn() {
   echo -e "${YELLOW}⚠${NC} $1"
 }
 
-# Detect if we're in a git repository
+# Validate branch name for git compatibility
+# Checks for empty names, spaces, and invalid git ref characters
+validate_branch_name() {
+  local branch="$1"
+
+  # Check for empty
+  if [[ -z "$branch" ]]; then
+    error "Branch name cannot be empty"
+  fi
+
+  # Check for spaces
+  if [[ "$branch" =~ [[:space:]] ]]; then
+    error "Branch name cannot contain spaces: '$branch'"
+  fi
+
+  # Check for invalid git ref characters: ~ ^ : \ * ? [
+  if [[ "$branch" =~ [\~\^:\\\*\?\[] ]]; then
+    error "Branch name contains invalid characters: '$branch'"
+  fi
+
+  # Check for leading/trailing dots or slashes
+  if [[ "$branch" =~ ^[./] ]] || [[ "$branch" =~ [./]$ ]]; then
+    error "Branch name cannot start or end with '.' or '/': '$branch'"
+  fi
+
+  # Check for consecutive dots (..)
+  if [[ "$branch" =~ \.\. ]]; then
+    error "Branch name cannot contain '..': '$branch'"
+  fi
+}
+
+# check_git_repo - Verify we're inside a git repository
+# Exits with error if not in a git repo
 check_git_repo() {
   if ! git rev-parse --git-dir > /dev/null 2>&1; then
     error "Not a git repository. Please run this from within a git repository."
   fi
 }
 
-# Get the git repository root
+# get_repo_root - Get the absolute path to the repository root
+# Returns: Absolute path to repo root (e.g., /Users/name/repos/myproject)
 get_repo_root() {
   git rev-parse --show-toplevel
 }
 
-# Get the repository name
+# get_repo_name - Get the repository directory name
+# Returns: Just the directory name, not the full path (e.g., "myproject")
 get_repo_name() {
   basename "$(get_repo_root)"
 }
 
-# Get the default branch (main or master)
+# get_default_branch - Detect the repository's default branch
+# Checks remote HEAD first, falls back to checking for main/master locally
+# Returns: Branch name (typically "main" or "master")
+# Exits with error if neither main nor master exists
 get_default_branch() {
   # Try to get from remote HEAD first
   if git symbolic-ref refs/remotes/origin/HEAD > /dev/null 2>&1; then
@@ -167,9 +204,12 @@ get_default_branch() {
   fi
 }
 
-# Detect the package manager
+# get_package_manager - Detect which package manager the project uses
+# Checks for lock files in order: bun, npm, yarn, pnpm
+# Returns: Package manager name (defaults to "npm" if none detected)
 get_package_manager() {
-  local repo_root=$(get_repo_root)
+  local repo_root
+  repo_root=$(get_repo_root)
 
   if [ -f "$repo_root/bun.lockb" ]; then
     echo "bun"
@@ -185,16 +225,22 @@ get_package_manager() {
   fi
 }
 
-# Check if a worktree exists
+# worktree_exists - Check if a worktree exists at the given path
+# Arguments: $1 - worktree path to check
+# Returns: 0 if exists, 1 if not
 worktree_exists() {
   local worktree_path="$1"
   git worktree list | grep -q "^$worktree_path" && return 0 || return 1
 }
 
-# Find worktree by branch name (fuzzy match)
+# find_worktree_by_branch - Find a worktree's path by its branch name
+# Arguments: $1 - branch name (exact or partial match)
+# Returns: Worktree path if found, empty string if not
+# First tries exact match, then falls back to case-insensitive fuzzy match
 find_worktree_by_branch() {
   local branch_name="$1"
-  local match=$(git worktree list --porcelain | grep " $branch_name$" | awk '{print $1}' | head -1)
+  local match
+  match=$(git worktree list --porcelain | grep " $branch_name$" | awk '{print $1}' | head -1)
 
   if [ -z "$match" ]; then
     # Try fuzzy matching if exact match fails
@@ -204,7 +250,8 @@ find_worktree_by_branch() {
   echo "$match"
 }
 
-# Get the current worktree path
+# get_current_worktree - Get the path of the current worktree
+# Returns: Absolute path to the current worktree's root directory
 get_current_worktree() {
   git rev-parse --show-toplevel
 }
@@ -213,10 +260,14 @@ get_current_worktree() {
 # Command: list
 # ============================================================================
 
+# cmd_list - Display all worktrees with their branches
+# Shows current worktree with a green checkmark, others with yellow bullet
+# Usage: wt list
 cmd_list() {
   check_git_repo
 
-  local current_worktree=$(get_current_worktree)
+  local current_worktree
+  current_worktree=$(get_current_worktree)
 
   echo -e "\n${BLUE}Current worktrees:${NC}"
 
@@ -226,15 +277,16 @@ cmd_list() {
 
   git worktree list --porcelain | while read -r line; do
     if [[ "$line" =~ ^worktree ]]; then
-      # New worktree entry
-      worktree_path=$(echo "$line" | sed 's/^worktree //')
+      # New worktree entry - use parameter expansion instead of sed
+      worktree_path="${line#worktree }"
       branch=""
     elif [[ "$line" =~ ^branch ]]; then
       # Extract branch name from refs/heads/branch-name
-      branch=$(echo "$line" | sed 's/^branch refs\/heads\///')
+      branch="${line#branch refs/heads/}"
 
       # Now display the worktree
-      local worktree_name=$(basename "$worktree_path")
+      local worktree_name
+      worktree_name=$(basename "$worktree_path")
 
       if [ "$worktree_path" = "$current_worktree" ]; then
         printf "  ${GREEN}✓${NC} %-30s ${BLUE}[${branch}]${NC}\n" "$worktree_name"
@@ -251,6 +303,12 @@ cmd_list() {
 # Command: create
 # ============================================================================
 
+# cmd_create - Create a new worktree with a branch
+# Arguments: $1 - branch name (required)
+#            $2 - optional flag: --code (open in editor) or --go (cd + editor)
+# Creates worktree in sibling directory using WORKTREE_NAME_PATTERN
+# Automatically installs dependencies if AUTO_INSTALL=true
+# Usage: wt create <branch-name> [--code|--go]
 cmd_create() {
   check_git_repo
 
@@ -269,15 +327,19 @@ cmd_create() {
     error "Branch name required. Usage: wt create <branch-name> [--code|--go]"
   fi
 
-  local repo_root=$(get_repo_root)
-  local repo_name=$(get_repo_name)
+  # Validate branch name before proceeding
+  validate_branch_name "$branch_name"
+
+  local repo_root repo_name worktree_name default_branch
+  repo_root=$(get_repo_root)
+  repo_name=$(get_repo_name)
 
   # Apply the worktree naming pattern from config
-  local worktree_name=$(apply_worktree_pattern "$WORKTREE_NAME_PATTERN" "$repo_name" "$branch_name")
+  worktree_name=$(apply_worktree_pattern "$WORKTREE_NAME_PATTERN" "$repo_name" "$branch_name")
   local worktree_path="../${worktree_name}"
   local worktree_full_path="${repo_root}/../${worktree_name}"
 
-  local default_branch=$(get_default_branch)
+  default_branch=$(get_default_branch)
   # Use configured package manager or auto-detect
   local pkg_manager="${PACKAGE_MANAGER}"
   if [ -z "$pkg_manager" ]; then
@@ -359,6 +421,10 @@ cmd_create() {
 # Command: switch
 # ============================================================================
 
+# cmd_switch - Switch to an existing worktree by branch name
+# Arguments: $1 - branch name (exact or fuzzy match)
+# Outputs a cd command for the shell wrapper to eval
+# Usage: wt switch <branch-name>
 cmd_switch() {
   check_git_repo
 
@@ -368,7 +434,8 @@ cmd_switch() {
     error "Branch name required. Usage: wt switch <branch-name>"
   fi
 
-  local worktree_path=$(find_worktree_by_branch "$branch_name")
+  local worktree_path
+  worktree_path=$(find_worktree_by_branch "$branch_name")
 
   if [ -z "$worktree_path" ]; then
     error "Worktree not found for branch matching '$branch_name'"
@@ -382,6 +449,12 @@ cmd_switch() {
 # Command: delete
 # ============================================================================
 
+# cmd_delete - Remove a worktree and optionally its branch
+# Arguments: $1 - branch name (required)
+#            $2 - optional flag: --keep-branch (preserve git branch)
+# Handles uncommitted changes with interactive prompts
+# Deletes both local and remote branches by default
+# Usage: wt delete <branch-name> [--keep-branch]
 cmd_delete() {
   check_git_repo
 
@@ -397,25 +470,28 @@ cmd_delete() {
     error "Branch name required. Usage: wt delete <branch-name> [--keep-branch]"
   fi
 
-  local worktree_path=$(find_worktree_by_branch "$branch_name")
+  local worktree_path current_worktree
+  worktree_path=$(find_worktree_by_branch "$branch_name")
 
   if [ -z "$worktree_path" ]; then
     error "Worktree not found for branch matching '$branch_name'"
   fi
 
-  local current_worktree=$(get_current_worktree)
+  current_worktree=$(get_current_worktree)
 
   # If trying to delete current worktree, switch to main first
   if [ "$worktree_path" = "$current_worktree" ]; then
     warn "Cannot delete current worktree. Switching to main repository..."
-    local repo_root=$(get_repo_root)
+    local repo_root
+    repo_root=$(get_repo_root)
     cd "$repo_root"
     info "Switched to main repository. Now deleting worktree..."
   fi
 
   # Check for uncommitted changes
   if [ -d "$worktree_path/.git" ]; then
-    local has_changes=$(cd "$worktree_path" && git status --porcelain | wc -l)
+    local has_changes
+    has_changes=$(cd "$worktree_path" && git status --porcelain | wc -l)
     if [ "$has_changes" -gt 0 ]; then
       warn "Worktree has uncommitted changes"
       echo "Options:"
