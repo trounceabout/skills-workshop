@@ -311,24 +311,24 @@ cmd_create() {
   # Install dependencies if AUTO_INSTALL is enabled
   if [ "$AUTO_INSTALL" = "true" ]; then
     info "Installing dependencies in $worktree_path..."
+    # Track whether installation succeeds
+    local install_success=true
     (
       cd "$worktree_full_path"
       case "$pkg_manager" in
-        bun)
-          bun install || warn "bun install failed"
-          ;;
-        npm)
-          npm install || warn "npm install failed"
-          ;;
-        yarn)
-          yarn install || warn "yarn install failed"
-          ;;
-        pnpm)
-          pnpm install || warn "pnpm install failed"
-          ;;
+        bun)  bun install  || exit 1 ;;
+        npm)  npm install  || exit 1 ;;
+        yarn) yarn install || exit 1 ;;
+        pnpm) pnpm install || exit 1 ;;
       esac
-    )
-    success "Dependencies installed"
+    ) || install_success=false
+
+    # Report accurately based on actual result
+    if [ "$install_success" = true ]; then
+      success "Dependencies installed"
+    else
+      warn "Dependency installation failed - you may need to run install manually"
+    fi
   else
     info "Skipping dependency installation (AUTO_INSTALL=false)"
   fi
@@ -464,9 +464,30 @@ cmd_delete() {
     fi
 
     if [ "$should_delete_branch" = true ]; then
-      git branch -D "$branch_name" 2>/dev/null || true
-      git push origin --delete "$branch_name" 2>/dev/null || true
-      success "Branch deleted"
+      # Track what actually gets deleted
+      local local_deleted=false
+      local remote_deleted=false
+
+      if git branch -D "$branch_name" 2>/dev/null; then
+        local_deleted=true
+      fi
+
+      if git push origin --delete "$branch_name" 2>/dev/null; then
+        remote_deleted=true
+      fi
+
+      # Report accurately based on what succeeded
+      if [ "$local_deleted" = true ] && [ "$remote_deleted" = true ]; then
+        success "Branch deleted (local and remote)"
+      elif [ "$local_deleted" = true ]; then
+        success "Local branch deleted"
+        info "Remote branch not found or already deleted"
+      elif [ "$remote_deleted" = true ]; then
+        success "Remote branch deleted"
+        info "Local branch not found or already deleted"
+      else
+        info "Branch not found locally or remotely (may already be deleted)"
+      fi
     fi
   fi
 
@@ -640,14 +661,12 @@ main() {
     delete)
       cmd_delete "${2:-}" "${3:-}"
       ;;
-<<<<<<< HEAD
     --version|-v|version)
       echo "wt version ${VERSION}"
       exit 0
-=======
+      ;;
     config)
       cmd_config "${2:-show}"
->>>>>>> 888761c (feat: add configuration system for wt tool)
       ;;
     help|--help|-h)
       cmd_help
